@@ -1,0 +1,59 @@
+# Creating Builder
+
+# PULL IMAGE
+FROM python:3.8.1-slim-buster as builder
+
+# SET WORKDIR
+WORKDIR /usr/src/app
+
+# SET ENVIRONMENT VAR
+ENV PYTHONDONTWRITEBYTECODE 1
+ENV PYTHONUNBUFFERED 1
+
+#iNSTALL SYSTEM DEPENDENCIES
+RUN apt-get update && apt-get install -y --no-install-recommends gcc
+
+# PIP UPDATE
+RUN pip install --upgrade pip
+COPY . /usr/src/app/
+
+# INSTALL PYTHON DEPENDENCIES
+COPY ./requirements.txt .
+RUN pip wheel --no-cache-dir --no-deps --wheel-dir /usr/src/app/wheels -r requirements.txt
+
+#---MAIN---
+
+# PULL IMAGE
+FROM python:3.8.1-slim-buster
+
+# CREATE DIRECTORY
+RUN mkdir -p /home/app
+
+# CREATE APP USER
+RUN adduser --system --group app
+
+# CREATE DIRECTORIES
+ENV HOME=/home/app 
+ENV APP_HOME=/home/app/web
+RUN mkdir $APP_HOME
+WORKDIR $APP_HOME 
+
+# INSTALL DEPENDENCIES
+RUN apt-get update && apt-get install -y --no-install-recommends netcat
+COPY --from=builder /usr/src/app/wheels /wheels
+COPY --from=builder /usr/src/app/requirements.txt .
+RUN pip install --upgrade pip
+RUN pip install --no-cache /wheels/*
+
+# COPY ENTRYPOINT AND PROJECT 
+COPY ./entrypoint.sh $APP_HOME
+COPY . $APP_HOME
+
+# CHOWN ALL FILES TO APP
+RUN chown -R app:app $APP_HOME
+
+USER app
+
+# RUN ENTRYPOINT
+ENTRYPOINT ["/home/app/web/entrypoint.sh"]
+
